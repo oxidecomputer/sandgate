@@ -85,7 +85,7 @@ pub struct BankStatus {
     peak_current_start_time: String,
 }
 
-#[derive(Deserialize_repr, PartialEq, Eq, Debug)]
+#[derive(Deserialize_repr, PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(i32)]
 pub enum LoadState {
     LowLoad = 1,
@@ -105,7 +105,7 @@ pub struct OutletControl {
     pub command: OutletCommand,
 }
 
-#[derive(Deserialize_repr, PartialEq, Eq, Debug)]
+#[derive(Deserialize_repr, PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(i32)]
 pub enum OutletCommand {
     ImmediateOn = 1,
@@ -145,7 +145,7 @@ pub struct OutletProperties {
     pub bank: u32,
 }
 
-#[derive(Deserialize_repr, PartialEq, Eq, Debug)]
+#[derive(Deserialize_repr, PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(i32)]
 pub enum PhaseLayoutType {
     Phase1ToNeutral = 1,
@@ -180,7 +180,7 @@ impl OutletStatus {
     }
 }
 
-#[derive(Deserialize_repr, PartialEq, Eq, Debug)]
+#[derive(Deserialize_repr, PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(i32)]
 pub enum CommandPending {
     Yes = 1,
@@ -188,7 +188,7 @@ pub enum CommandPending {
     Unknown = 3,
 }
 
-#[derive(Deserialize_repr, PartialEq, Eq, Debug)]
+#[derive(Deserialize_repr, PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(i32)]
 pub enum State {
     Off = 1,
@@ -208,67 +208,13 @@ impl Pdu {
         snmp: &Client,
         outlet: u32,
         outlet_command: OutletCommand,
-    ) -> Result<Value> {
+    ) -> Result<()> {
         let top = snmp
             .tree
             .oid_by_name(
                 "internet.private.enterprises.apc.products.hardware.rPDU2",
             )
             .map_err(|e| anyhow!("{e} (is apc in the OID tree?)"))?;
-        let ctl = snmp.tree.oid_by_name_under(
-            top,
-            "rPDU2Outlet.\
-                     rPDU2OutletSwitched.\
-                     rPDU2OutletSwitchedControlTable.\
-                     rPDU2OutletSwitchedControlEntry",
-        )?;
-        let cmd: Oid = snmp
-            .tree
-            .oid_by_name_under(ctl, "rPDU2OutletSwitchedControlCommand")?
-            .child(outlet)
-            .unwrap()
-            .into();
-
-        Ok(snmp
-            .set(cmd, Value(csnmp::ObjectValue::Integer(outlet_command as i32)))
-            .await?)
-    }
-
-    pub async fn poll_outlet(
-        snmp: &Client,
-        outlet: u32,
-    ) -> Result<(State, OutletCommand, CommandPending)> {
-        let top = snmp
-            .tree
-            .oid_by_name(
-                "internet.private.enterprises.apc.products.hardware.rPDU2",
-            )
-            .map_err(|e| anyhow!("{e} (is apc in the OID tree?)"))?;
-
-        let status = snmp.tree.oid_by_name_under(
-            top,
-            "rPDU2Outlet.\
-                     rPDU2OutletSwitched.\
-                     rPDU2OutletSwitchedStatusTable.\
-                     rPDU2OutletSwitchedStatusEntry",
-        )?;
-
-        let state: Oid = snmp
-            .tree
-            .oid_by_name_under(status, "rPDU2OutletSwitchedStatusState")?
-            .child(outlet)
-            .unwrap()
-            .into();
-        let cmd_pending: Oid = snmp
-            .tree
-            .oid_by_name_under(
-                status,
-                "rPDU2OutletSwitchedStatusCommandPending",
-            )?
-            .child(outlet)
-            .unwrap()
-            .into();
-
         let ctl = snmp.tree.oid_by_name_under(
             top,
             "rPDU2Outlet.\
@@ -284,27 +230,133 @@ impl Pdu {
             .into();
 
         let res = snmp
-            .snmp
-            .get_multiple([state.0, cmd_pending.0, cmd.0])
-            .await?
-            .into_iter()
-            .map(|(oid, val)| (Oid(oid), Value(val)))
-            .collect::<BTreeMap<Oid, Value>>();
+            .set(cmd, Value(csnmp::ObjectValue::Integer(outlet_command as i32)))
+            .await?;
 
-        let Some(state) = res.get(&state) else {
-            bail!("no state");
-        };
-        let Some(cmd) = res.get(&cmd) else {
-            bail!("no cmd");
-        };
-        let Some(cmd_pending) = res.get(&cmd_pending) else {
-            bail!("no cmd_pending");
-        };
-        Ok((
-            State::deserialize(state.into_deserializer())?,
-            OutletCommand::deserialize(cmd.into_deserializer())?,
-            CommandPending::deserialize(cmd_pending.into_deserializer())?,
-        ))
+        /*
+         * The resultant value should be the same as the one we sent.
+         */
+        if let csnmp::ObjectValue::Integer(i) = res.0 {
+            if i == outlet_command as i32 {
+                return Ok(());
+            }
+        }
+        bail!("unusual response from PDU: {res:?}");
+    }
+
+    pub async fn poll_outlet(
+        snmp: &Client,
+        outlet: u32,
+    ) -> Result<(State, OutletCommand, CommandPending)> {
+        Ok(Self::poll_outlets(snmp, &[outlet]).await?.remove(&outlet).unwrap())
+    }
+
+    pub async fn poll_outlets(
+        snmp: &Client,
+        outlets: &[u32],
+    ) -> Result<BTreeMap<u32, (State, OutletCommand, CommandPending)>> {
+        let top = snmp
+            .tree
+            .oid_by_name(
+                "internet.private.enterprises.apc.products.hardware.rPDU2",
+            )
+            .map_err(|e| anyhow!("{e} (is apc in the OID tree?)"))?;
+
+        let status = snmp.tree.oid_by_name_under(
+            top,
+            "rPDU2Outlet.\
+                     rPDU2OutletSwitched.\
+                     rPDU2OutletSwitchedStatusTable.\
+                     rPDU2OutletSwitchedStatusEntry",
+        )?;
+        let ctl = snmp.tree.oid_by_name_under(
+            top,
+            "rPDU2Outlet.\
+                     rPDU2OutletSwitched.\
+                     rPDU2OutletSwitchedControlTable.\
+                     rPDU2OutletSwitchedControlEntry",
+        )?;
+
+        let outlets = outlets
+            .iter()
+            .map(|num| {
+                let state: Oid = snmp
+                    .tree
+                    .oid_by_name_under(
+                        status,
+                        "rPDU2OutletSwitchedStatusState",
+                    )?
+                    .child(*num)
+                    .unwrap()
+                    .into();
+                let cmd_pending: Oid = snmp
+                    .tree
+                    .oid_by_name_under(
+                        status,
+                        "rPDU2OutletSwitchedStatusCommandPending",
+                    )?
+                    .child(*num)
+                    .unwrap()
+                    .into();
+                let cmd: Oid = snmp
+                    .tree
+                    .oid_by_name_under(
+                        ctl,
+                        "rPDU2OutletSwitchedControlCommand",
+                    )?
+                    .child(*num)
+                    .unwrap()
+                    .into();
+                Ok((*num, state, cmd_pending, cmd))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let oids = outlets
+            .iter()
+            .map(|(_, a, b, c)| [a.0, b.0, c.0])
+            .flatten()
+            .collect::<Vec<_>>();
+
+        let mut res: BTreeMap<Oid, Value> = Default::default();
+
+        /*
+         * If we ask for too many values at once, it appears to overwhelm the
+         * management interface.
+         */
+        for ch in oids.chunks(32) {
+            snmp.snmp
+                .get_multiple(ch.iter().cloned())
+                .await?
+                .into_iter()
+                .for_each(|(oid, val)| {
+                    res.insert(Oid(oid), Value(val));
+                });
+        }
+
+        outlets
+            .into_iter()
+            .map(|(num, state, cmd, cmd_pending)| {
+                let Some(state) = res.get(&state) else {
+                    bail!("outlet {num}: no state");
+                };
+                let Some(cmd) = res.get(&cmd) else {
+                    bail!("outlet {num}: no cmd");
+                };
+                let Some(cmd_pending) = res.get(&cmd_pending) else {
+                    bail!("outlet {num}: no cmd_pending");
+                };
+                Ok((
+                    num,
+                    (
+                        State::deserialize(state.into_deserializer())?,
+                        OutletCommand::deserialize(cmd.into_deserializer())?,
+                        CommandPending::deserialize(
+                            cmd_pending.into_deserializer(),
+                        )?,
+                    ),
+                ))
+            })
+            .collect::<Result<_>>()
     }
 
     pub async fn from_client(snmp: &Client) -> Result<Pdu> {
