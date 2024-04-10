@@ -76,7 +76,8 @@ pub fn populate(tree: &mut OidTree) -> Result<()> {
             ("swIfPortFecMode", "swIfEntry", 49),
             ("swIfPortNumOfLanes", "swIfEntry", 50),
         ],
-    ).map_err(|e| anyhow!("cisco::populate: {e}"))?;
+    )
+    .map_err(|e| anyhow!("cisco::populate: {e}"))?;
 
     Ok(())
 }

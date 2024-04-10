@@ -14,13 +14,14 @@ pub mod mib_2;
 mod sublude {
     pub(crate) use super::add_from_instructions_under;
     pub(crate) use crate::oidtree::OidTree;
+    pub(crate) use crate::value::Value;
     pub(crate) use crate::walk::WalkedValues;
     pub(crate) use crate::{Client, Oid};
     #[allow(unused_imports)]
     pub(crate) use anyhow::{anyhow, bail, Result};
     pub(crate) use serde::Deserialize;
     pub(crate) use serde_repr::Deserialize_repr;
-    pub(crate) use std::collections::{BTreeMap};
+    pub(crate) use std::collections::BTreeMap;
     pub(crate) use std::time::Duration;
 }
 

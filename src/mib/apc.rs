@@ -2,6 +2,8 @@
  * Copyright 2024 Oxide Computer Company
  */
 
+use serde::de::IntoDeserializer;
+
 use super::sublude::*;
 
 #[derive(Debug, Deserialize)]
@@ -96,11 +98,11 @@ pub enum LoadState {
 #[serde(rename_all = "PascalCase")]
 #[allow(unused)]
 pub struct OutletControl {
-    index: u32,
-    module: u32,
-    name: String,
-    number: u32,
-    command: OutletCommand,
+    pub index: u32,
+    pub module: u32,
+    pub name: String,
+    pub number: u32,
+    pub command: OutletCommand,
 }
 
 #[derive(Deserialize_repr, PartialEq, Eq, Debug)]
@@ -120,27 +122,27 @@ pub enum OutletCommand {
 #[serde(rename_all = "PascalCase")]
 #[allow(unused)]
 pub struct OutletConfig {
-    index: u32,
-    module: u32,
-    name: String,
-    number: u32,
-    power_on_time: i32,
-    power_off_time: i32,
-    reboot_duration: u32,
-    external_link: String,
+    pub index: u32,
+    pub module: u32,
+    pub name: String,
+    pub number: u32,
+    pub power_on_time: i32,
+    pub power_off_time: i32,
+    pub reboot_duration: u32,
+    pub external_link: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 #[allow(unused)]
 pub struct OutletProperties {
-    index: u32,
-    module: u32,
-    name: String,
-    number: u32,
+    pub index: u32,
+    pub module: u32,
+    pub name: String,
+    pub number: u32,
 
-    phase_layout: PhaseLayoutType,
-    bank: u32,
+    pub phase_layout: PhaseLayoutType,
+    pub bank: u32,
 }
 
 #[derive(Deserialize_repr, PartialEq, Eq, Debug)]
@@ -158,14 +160,24 @@ pub enum PhaseLayoutType {
 #[serde(rename_all = "PascalCase")]
 #[allow(unused)]
 pub struct OutletStatus {
-    index: u32,
-    module: u32,
-    name: String,
-    number: u32,
+    pub index: u32,
+    pub module: u32,
+    pub name: String,
+    pub number: u32,
 
-    state: State,
-    command_pending: CommandPending,
-    external_link: String,
+    pub state: State,
+    pub command_pending: CommandPending,
+    pub external_link: String,
+}
+
+impl OutletStatus {
+    pub fn is_command_pending(&self) -> Result<bool> {
+        match self.command_pending {
+            CommandPending::Yes => Ok(true),
+            CommandPending::No => Ok(false),
+            CommandPending::Unknown => bail!("command pending state unknown"),
+        }
+    }
 }
 
 #[derive(Deserialize_repr, PartialEq, Eq, Debug)]
@@ -192,6 +204,109 @@ pub struct Pdu {
 }
 
 impl Pdu {
+    pub async fn send_command(
+        snmp: &Client,
+        outlet: u32,
+        outlet_command: OutletCommand,
+    ) -> Result<Value> {
+        let top = snmp
+            .tree
+            .oid_by_name(
+                "internet.private.enterprises.apc.products.hardware.rPDU2",
+            )
+            .map_err(|e| anyhow!("{e} (is apc in the OID tree?)"))?;
+        let ctl = snmp.tree.oid_by_name_under(
+            top,
+            "rPDU2Outlet.\
+                     rPDU2OutletSwitched.\
+                     rPDU2OutletSwitchedControlTable.\
+                     rPDU2OutletSwitchedControlEntry",
+        )?;
+        let cmd: Oid = snmp
+            .tree
+            .oid_by_name_under(ctl, "rPDU2OutletSwitchedControlCommand")?
+            .child(outlet)
+            .unwrap()
+            .into();
+
+        Ok(snmp
+            .set(cmd, Value(csnmp::ObjectValue::Integer(outlet_command as i32)))
+            .await?)
+    }
+
+    pub async fn poll_outlet(
+        snmp: &Client,
+        outlet: u32,
+    ) -> Result<(State, OutletCommand, CommandPending)> {
+        let top = snmp
+            .tree
+            .oid_by_name(
+                "internet.private.enterprises.apc.products.hardware.rPDU2",
+            )
+            .map_err(|e| anyhow!("{e} (is apc in the OID tree?)"))?;
+
+        let status = snmp.tree.oid_by_name_under(
+            top,
+            "rPDU2Outlet.\
+                     rPDU2OutletSwitched.\
+                     rPDU2OutletSwitchedStatusTable.\
+                     rPDU2OutletSwitchedStatusEntry",
+        )?;
+
+        let state: Oid = snmp
+            .tree
+            .oid_by_name_under(status, "rPDU2OutletSwitchedStatusState")?
+            .child(outlet)
+            .unwrap()
+            .into();
+        let cmd_pending: Oid = snmp
+            .tree
+            .oid_by_name_under(
+                status,
+                "rPDU2OutletSwitchedStatusCommandPending",
+            )?
+            .child(outlet)
+            .unwrap()
+            .into();
+
+        let ctl = snmp.tree.oid_by_name_under(
+            top,
+            "rPDU2Outlet.\
+                     rPDU2OutletSwitched.\
+                     rPDU2OutletSwitchedControlTable.\
+                     rPDU2OutletSwitchedControlEntry",
+        )?;
+        let cmd: Oid = snmp
+            .tree
+            .oid_by_name_under(ctl, "rPDU2OutletSwitchedControlCommand")?
+            .child(outlet)
+            .unwrap()
+            .into();
+
+        let res = snmp
+            .snmp
+            .get_multiple([state.0, cmd_pending.0, cmd.0])
+            .await?
+            .into_iter()
+            .map(|(oid, val)| (Oid(oid), Value(val)))
+            .collect::<BTreeMap<Oid, Value>>();
+
+        let Some(state) = res.get(&state) else {
+            bail!("no state");
+        };
+        let Some(cmd) = res.get(&cmd) else {
+            bail!("no cmd");
+        };
+        let Some(cmd_pending) = res.get(&cmd_pending) else {
+            bail!("no cmd_pending");
+        };
+        Ok((
+            State::deserialize(state.into_deserializer())?,
+            OutletCommand::deserialize(cmd.into_deserializer())?,
+            CommandPending::deserialize(cmd_pending.into_deserializer())?,
+        ))
+    }
+
     pub async fn from_client(snmp: &Client) -> Result<Pdu> {
         let top = snmp
             .tree

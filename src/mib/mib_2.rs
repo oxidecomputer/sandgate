@@ -22,7 +22,6 @@ pub struct System {
 }
 
 impl System {
-
     pub fn name(&self) -> &str {
         &self.name
     }

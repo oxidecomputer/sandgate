@@ -5,6 +5,7 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::Deref,
+    result::Result as SResult,
     sync::Arc,
     time::Duration,
 };
@@ -137,6 +138,14 @@ impl Client {
             retries: 0,
             tree: mib::base(),
         }
+    }
+
+    pub async fn set(
+        &self,
+        oid: Oid,
+        value: value::Value,
+    ) -> SResult<value::Value, csnmp::SnmpClientError> {
+        self.snmp.set(oid.0, value.0).await.map(|val| value::Value(val))
     }
 
     pub async fn walk(&self, top: Oid) -> Result<walk::WalkedValues> {
