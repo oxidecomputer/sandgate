@@ -1,10 +1,14 @@
 /*
- * Copyright 2024 Oxide Computer Company
+ * Copyright 2025 Oxide Computer Company
  */
 
 use anyhow::{bail, Result};
 
-use sandgate::mib::{self, apc::Pdu, mib_2::System};
+use sandgate::mib::{
+    self,
+    apc::{Pdu, Pdu1},
+    mib_2::System,
+};
 use sandgate::Client;
 
 #[tokio::main]
@@ -38,7 +42,16 @@ async fn main() -> Result<()> {
             .unwrap_or("?")
     );
 
-    let pdu: Pdu = Pdu::from_client(&c).await?;
+    if let Err(e) = inspect_pdu2(&c).await {
+        println!("device does not support rPDU2 ({e}), trying rPDU...");
+        inspect_pdu1(&c).await?;
+    }
+
+    Ok(())
+}
+
+async fn inspect_pdu2(c: &Client) -> Result<()> {
+    let pdu: Pdu = Pdu::from_client(c).await?;
     println!("pdu ident =          {:#?}", pdu.ident()?);
     println!();
 
@@ -49,6 +62,19 @@ async fn main() -> Result<()> {
 
     println!("pdu outlet config =  {:#?}", pdu.outlet_config()?);
     println!("pdu outlet props =   {:#?}", pdu.outlet_props()?);
+    println!("pdu outlet status =  {:#?}", pdu.outlet_status()?);
+    println!("pdu outlet control = {:#?}", pdu.outlet_control()?);
+    println!();
+
+    Ok(())
+}
+
+async fn inspect_pdu1(c: &Client) -> Result<()> {
+    let pdu: Pdu1 = Pdu1::from_client(c).await?;
+    println!("pdu ident =          {:#?}", pdu.ident()?);
+    println!();
+
+    println!("pdu outlet config =  {:#?}", pdu.outlet_config()?);
     println!("pdu outlet status =  {:#?}", pdu.outlet_status()?);
     println!("pdu outlet control = {:#?}", pdu.outlet_control()?);
     println!();

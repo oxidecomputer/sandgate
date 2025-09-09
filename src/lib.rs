@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Oxide Computer Company
+ * Copyright 2025 Oxide Computer Company
  */
 
 use std::{
@@ -123,8 +123,9 @@ impl From<ObjectIdentifier> for RelativeOid {
     }
 }
 
+#[derive(Clone)]
 pub struct Client {
-    snmp: csnmp::Snmp2cClient,
+    snmp: Arc<csnmp::Snmp2cClient>,
     tree: Arc<oidtree::OidTree>,
 }
 
@@ -216,14 +217,16 @@ impl ClientBuilder {
             )
         };
 
-        let snmp = csnmp::Snmp2cClient::new(
-            target,
-            self.community.clone(),
-            Some(bind),
-            Some(self.timeout),
-            self.retries,
-        )
-        .await?;
+        let snmp = Arc::new(
+            csnmp::Snmp2cClient::new(
+                target,
+                self.community.clone(),
+                Some(bind),
+                Some(self.timeout),
+                self.retries,
+            )
+            .await?,
+        );
 
         Ok(Client { snmp, tree: Arc::new(self.tree.clone()) })
     }

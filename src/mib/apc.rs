@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Oxide Computer Company
+ * Copyright 2025 Oxide Computer Company
  */
 
 use serde::de::IntoDeserializer;
@@ -10,24 +10,49 @@ use super::sublude::*;
 #[serde(rename_all = "PascalCase")]
 #[allow(unused)]
 pub struct Ident {
-    index: u32,
-    module: u32,
-    name: String,
-    location: String,
-    hardware_rev: String,
-    firmware_rev: String,
-    date_of_manufacture: String,
-    model_number: String,
-    serial_number: String,
-    contact: String,
-    boot_monitor_rev: String,
-    long_description: String,
+    pub index: u32,
+    pub module: u32,
+    pub name: String,
+    pub location: String,
+    pub hardware_rev: String,
+    pub firmware_rev: String,
+    pub date_of_manufacture: String,
+    pub model_number: String,
+    pub serial_number: String,
+    pub contact: String,
+    pub boot_monitor_rev: String,
+    pub long_description: String,
     #[serde(rename = "NMCSerialNumber")]
-    nmc_serial_number: String,
-    app_build_date: String,
+    pub nmc_serial_number: String,
+    pub app_build_date: String,
     #[serde(rename = "AOSBuildDate")]
-    aos_build_date: String,
-    boot_mon_build_date: String,
+    pub aos_build_date: String,
+    pub boot_mon_build_date: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+#[allow(unused)]
+pub struct Ident1 {
+    pub name: String,
+    pub hardware_rev: String,
+    pub firmware_rev: String,
+    pub date_of_manufacture: String,
+    pub model_number: String,
+    pub serial_number: String,
+    pub device_rating: u32,
+    pub device_num_outlets: u32,
+    pub device_num_phases: u32,
+    pub device_breaker_rating: u32,
+    pub device_orientation: u32,
+    pub device_outlet_layout: u32,
+    pub device_display_orientation: u32,
+    #[serde(rename = "DeviceLinetoLineVoltage")]
+    pub device_line_to_line_voltage: u32,
+    pub device_power_watts: u32,
+    pub device_power_factor: u32,
+    #[serde(rename = "DevicePowerVA")]
+    pub device_power_va: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,25 +89,25 @@ pub enum PeakCurrentReset {
 #[serde(rename_all = "PascalCase")]
 #[allow(unused)]
 pub struct BankProperties {
-    index: u32,
-    module: u32,
-    number: u32,
-    phase_layout: PhaseLayoutType,
-    breaker_rating: u32,
+    pub index: u32,
+    pub module: u32,
+    pub number: u32,
+    pub phase_layout: PhaseLayoutType,
+    pub breaker_rating: u32,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 #[allow(unused)]
 pub struct BankStatus {
-    index: u32,
-    module: u32,
-    number: u32,
-    load_state: LoadState,
-    current: u32,
-    peak_current: u32,
-    peak_current_timestamp: String,
-    peak_current_start_time: String,
+    pub index: u32,
+    pub module: u32,
+    pub number: u32,
+    pub load_state: LoadState,
+    pub current: u32,
+    pub peak_current: u32,
+    pub peak_current_timestamp: String,
+    pub peak_current_start_time: String,
 }
 
 #[derive(Deserialize_repr, PartialEq, Eq, Debug, Clone, Copy)]
@@ -92,6 +117,29 @@ pub enum LoadState {
     Normal = 2,
     NearOverload = 3,
     Overload = 4,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+#[allow(unused)]
+pub struct OutletControl1 {
+    pub index: u32,
+    pub outlet_name: String,
+    pub outlet_phase: u32,
+    pub outlet_command: OutletCommand1,
+    pub outlet_bank: u32,
+}
+
+#[derive(Deserialize_repr, PartialEq, Eq, Debug, Clone, Copy)]
+#[repr(i32)]
+pub enum OutletCommand1 {
+    ImmediateOn = 1,
+    ImmediateOff = 2,
+    ImmediateReboot = 3,
+    DelayedOn = 4,
+    DelayedOff = 5,
+    DelayedReboot = 6,
+    CancelPendingCommand = 7,
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,6 +183,19 @@ pub struct OutletConfig {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 #[allow(unused)]
+pub struct OutletConfig1 {
+    pub index: u32,
+    pub outlet_name: String,
+    pub outlet_phase: u32,
+    pub power_on_time: i32,
+    pub power_off_time: i32,
+    pub reboot_duration: u32,
+    pub outlet_bank: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+#[allow(unused)]
 pub struct OutletProperties {
     pub index: u32,
     pub module: u32,
@@ -154,6 +215,36 @@ pub enum PhaseLayoutType {
     Phase1ToPhase2 = 4,
     Phase2ToPhase3 = 5,
     Phase3ToPhase1 = 6,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+#[allow(unused)]
+pub struct OutletStatus1 {
+    pub index: u32,
+    pub outlet_name: String,
+    pub outlet_phase: u32,
+    pub outlet_state: State1,
+    pub command_pending: CommandPending,
+    pub outlet_bank: u32,
+    pub load: u32,
+}
+
+impl OutletStatus1 {
+    pub fn is_command_pending(&self) -> Result<bool> {
+        match self.command_pending {
+            CommandPending::Yes => Ok(true),
+            CommandPending::No => Ok(false),
+            CommandPending::Unknown => bail!("command pending state unknown"),
+        }
+    }
+}
+
+#[derive(Deserialize_repr, PartialEq, Eq, Debug, Clone, Copy)]
+#[repr(i32)]
+pub enum State1 {
+    On = 1,
+    Off = 2,
 }
 
 #[derive(Debug, Deserialize)]
@@ -193,6 +284,237 @@ pub enum CommandPending {
 pub enum State {
     Off = 1,
     On = 2,
+}
+
+/**
+ * An object that ties together all of the older rPDU tables into one large
+ * snapshot.
+ */
+pub struct Pdu1 {
+    top: Oid,
+    walk: WalkedValues,
+}
+
+impl Pdu1 {
+    pub async fn send_command(
+        snmp: &Client,
+        outlet: u32,
+        outlet_command: OutletCommand1,
+    ) -> Result<()> {
+        let top = snmp
+            .tree
+            .oid_by_name(
+                "internet.private.enterprises.apc.products.hardware.rPDU",
+            )
+            .map_err(|e| anyhow!("{e} (is apc in the OID tree?)"))?;
+        let ctl = snmp.tree.oid_by_name_under(
+            top,
+            "rPDUOutlet.\
+                     rPDUOutletControl.\
+                     rPDUOutletControlTable.\
+                     rPDUOutletControlEntry",
+        )?;
+        let cmd: Oid = snmp
+            .tree
+            .oid_by_name_under(ctl, "rPDUOutletControlOutletCommand")?
+            .child(outlet)
+            .unwrap()
+            .into();
+
+        let res = snmp
+            .set(cmd, Value(csnmp::ObjectValue::Integer(outlet_command as i32)))
+            .await?;
+
+        /*
+         * The resultant value should be the same as the one we sent.
+         */
+        if let csnmp::ObjectValue::Integer(i) = res.0 {
+            if i == outlet_command as i32 {
+                return Ok(());
+            }
+        }
+        bail!("unusual response from PDU: {res:?}");
+    }
+
+    pub async fn poll_outlet(
+        snmp: &Client,
+        outlet: u32,
+    ) -> Result<(State1, OutletCommand1, CommandPending)> {
+        Ok(Self::poll_outlets(snmp, &[outlet]).await?.remove(&outlet).unwrap())
+    }
+
+    pub async fn poll_outlets(
+        snmp: &Client,
+        outlets: &[u32],
+    ) -> Result<BTreeMap<u32, (State1, OutletCommand1, CommandPending)>> {
+        let top = snmp
+            .tree
+            .oid_by_name(
+                "internet.private.enterprises.apc.products.hardware.rPDU",
+            )
+            .map_err(|e| anyhow!("{e} (is apc in the OID tree?)"))?;
+
+        let status = snmp.tree.oid_by_name_under(
+            top,
+            "rPDUOutlet.\
+                     rPDUOutletStatus.\
+                     rPDUOutletStatusTable.\
+                     rPDUOutletStatusEntry",
+        )?;
+        let ctl = snmp.tree.oid_by_name_under(
+            top,
+            "rPDUOutlet.\
+                     rPDUOutletControl.\
+                     rPDUOutletControlTable.\
+                     rPDUOutletControlEntry",
+        )?;
+
+        let outlets = outlets
+            .iter()
+            .map(|num| {
+                let state: Oid = snmp
+                    .tree
+                    .oid_by_name_under(status, "rPDUOutletStatusOutletState")?
+                    .child(*num)
+                    .unwrap()
+                    .into();
+                let cmd_pending: Oid = snmp
+                    .tree
+                    .oid_by_name_under(
+                        status,
+                        "rPDUOutletStatusCommandPending",
+                    )?
+                    .child(*num)
+                    .unwrap()
+                    .into();
+                let cmd: Oid = snmp
+                    .tree
+                    .oid_by_name_under(ctl, "rPDUOutletControlOutletCommand")?
+                    .child(*num)
+                    .unwrap()
+                    .into();
+                Ok((*num, state, cmd_pending, cmd))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let oids = outlets
+            .iter()
+            .map(|(_, a, b, c)| [a.0, b.0, c.0])
+            .flatten()
+            .collect::<Vec<_>>();
+
+        let mut res: BTreeMap<Oid, Value> = Default::default();
+
+        /*
+         * If we ask for too many values at once, it appears to overwhelm the
+         * management interface.
+         */
+        for ch in oids.chunks(32) {
+            snmp.snmp
+                .get_multiple(ch.iter().cloned())
+                .await?
+                .into_iter()
+                .for_each(|(oid, val)| {
+                    res.insert(Oid(oid), Value(val));
+                });
+        }
+
+        outlets
+            .into_iter()
+            .map(|(num, state, cmd, cmd_pending)| {
+                let Some(state) = res.get(&state) else {
+                    bail!("outlet {num}: no state");
+                };
+                let Some(cmd) = res.get(&cmd) else {
+                    bail!("outlet {num}: no cmd");
+                };
+                let Some(cmd_pending) = res.get(&cmd_pending) else {
+                    bail!("outlet {num}: no cmd_pending");
+                };
+                Ok((
+                    num,
+                    (
+                        State1::deserialize(state.into_deserializer())?,
+                        OutletCommand1::deserialize(cmd.into_deserializer())?,
+                        CommandPending::deserialize(
+                            cmd_pending.into_deserializer(),
+                        )?,
+                    ),
+                ))
+            })
+            .collect::<Result<_>>()
+    }
+
+    pub async fn from_client(snmp: &Client) -> Result<Self> {
+        let top = snmp
+            .tree
+            .oid_by_name(
+                "internet.private.enterprises.apc.products.hardware.rPDU",
+            )
+            .map_err(|e| anyhow!("{e} (is apc in the OID tree?)"))?;
+
+        let walk = snmp.walk(top).await?;
+
+        Ok(Self { top, walk })
+    }
+
+    pub fn ident(&self) -> Result<Ident1> {
+        Ok(self.walk.extract_object(
+            self.walk.tree.oid_by_name_under(self.top, "rPDUIdent")?,
+            "rPDUIdent",
+        )?)
+    }
+
+    pub fn outlet_config(&self) -> Result<BTreeMap<u32, OutletConfig1>> {
+        self.walk.extract_table(
+            self.walk.tree.oid_by_name_under(
+                self.top,
+                "rPDUStatus.rPDUStatusOutletTableSize",
+            )?,
+            self.walk.tree.oid_by_name_under(
+                self.top,
+                "rPDUOutlet.\
+                    rPDUOutletConfig.\
+                    rPDUOutletConfigTable.\
+                    rPDUOutletConfigEntry",
+            )?,
+            "rPDUOutletConfig",
+        )
+    }
+
+    pub fn outlet_status(&self) -> Result<BTreeMap<u32, OutletStatus1>> {
+        self.walk.extract_table(
+            self.walk.tree.oid_by_name_under(
+                self.top,
+                "rPDUStatus.rPDUStatusOutletTableSize",
+            )?,
+            self.walk.tree.oid_by_name_under(
+                self.top,
+                "rPDUOutlet.\
+                     rPDUOutletStatus.\
+                     rPDUOutletStatusTable.\
+                     rPDUOutletStatusEntry",
+            )?,
+            "rPDUOutletStatus",
+        )
+    }
+
+    pub fn outlet_control(&self) -> Result<BTreeMap<u32, OutletControl1>> {
+        self.walk.extract_table(
+            self.walk.tree.oid_by_name_under(
+                self.top,
+                "rPDUStatus.rPDUStatusOutletTableSize",
+            )?,
+            self.walk.tree.oid_by_name_under(
+                self.top,
+                "rPDUOutlet.\
+                    rPDUOutletControl.\
+                    rPDUOutletControlTable.\
+                    rPDUOutletControlEntry",
+            )?,
+            "rPDUOutletControl",
+        )
+    }
 }
 
 /**
@@ -359,7 +681,7 @@ impl Pdu {
             .collect::<Result<_>>()
     }
 
-    pub async fn from_client(snmp: &Client) -> Result<Pdu> {
+    pub async fn from_client(snmp: &Client) -> Result<Self> {
         let top = snmp
             .tree
             .oid_by_name(
@@ -369,7 +691,7 @@ impl Pdu {
 
         let walk = snmp.walk(top).await?;
 
-        Ok(Pdu { top, walk })
+        Ok(Self { top, walk })
     }
 
     pub fn ident(&self) -> Result<BTreeMap<u32, Ident>> {
